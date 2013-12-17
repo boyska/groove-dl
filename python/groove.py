@@ -96,10 +96,40 @@ def getResultsFromPlaylist(query):
     resp = conn.getresponse()
     j = json.JSONDecoder().decode(
             gzip.GzipFile(fileobj=(StringIO.StringIO(resp.read()))).read())
-    try:
-        return j["result"]["Songs"]
-    except:
-        return j["result"]
+    return j["result"]["Songs"]
+
+def getArtistId(profileID):
+    p = {}
+    p["parameters"] = {}
+    p["parameters"]["profileID"] = int(profileID)
+    p["header"] = h
+    p["header"]["client"] = htmlclient[0]
+    p["header"]["clientRevision"] = htmlclient[1]
+    p["header"]["token"] = prepToken("getProfileInfoByID", htmlclient[2])
+    p["method"] = "getProfileInfoByID"
+
+    conn = httplib.HTTPConnection(URL)
+    conn.request("POST", "/more.php?" + p["method"], json.JSONEncoder().encode(p), htmlclient[3])
+    resp = conn.getresponse()
+    j = json.JSONDecoder().decode(
+            gzip.GzipFile(fileobj=(StringIO.StringIO(resp.read()))).read())
+    return j["result"]["artist"]["ArtistID"]
+
+def getArtistSongs(artistID):
+    p = {}
+    p["parameters"] = {}
+    p["parameters"]["artistID"] = int(artistID)
+    p["header"] = h
+    p["header"]["client"] = htmlclient[0]
+    p["header"]["clientRevision"] = htmlclient[1]
+    p["header"]["token"] = prepToken("artistGetArtistSongs", htmlclient[2])
+    p["method"] = "artistGetArtistSongs"
+    conn = httplib.HTTPConnection(URL)
+    conn.request("POST", "/more.php?" + p["method"], json.JSONEncoder().encode(p), htmlclient[3])
+    resp = conn.getresponse()
+    j = json.JSONDecoder().decode(
+            gzip.GzipFile(fileobj=(StringIO.StringIO(resp.read()))).read())
+    return j["result"]
 
 
 #Get all songs by a certain artist
@@ -235,6 +265,10 @@ if __name__ == "__main__":
         plid = sys.argv[1].rsplit('/', 1)[1]
         print "Playlist detected:", plid
         songs = getResultsFromPlaylist(plid)
+    elif '#!/profile/' in sys.argv[1]:
+        plid = sys.argv[1].rsplit('/', 1)[1]
+        print "Artist profile detected:", plid
+        songs = getArtistSongs(getArtistId(plid))
     else:
         songs = ui_results(sys.argv[1])
     for song in songs:
