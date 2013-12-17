@@ -272,19 +272,20 @@ if __name__ == "__main__":
     else:
         songs = ui_results(sys.argv[1])
     for song in songs:
-        print song
+        if 'SongName' in song:
+            filename = "%s - %s.mp3" % (song["ArtistName"], song["SongName"])
+        else:
+            filename = "%s - %s.mp3" % (song["ArtistName"], song["Name"])
+        if os.path.exists(filename):
+            print "File '%s' already exists; skipping" % filename
+            continue
         addSongsToQueue(song, queueID)
-        print "Retrieving stream key.."
         stream = getStreamKeyFromSongIDs(song["SongID"])
         for k,v in stream.iteritems():
             stream=v
         if stream == []:
             print "Failed"
             exit()
-        if 'SongName' in song:
-            filename = "%s - %s.mp3" % (song["ArtistName"], song["SongName"])
-        else:
-            filename = "%s - %s.mp3" % (song["ArtistName"], song["Name"])
         cmd = 'wget --post-data=streamKey=%s -O "%s" "http://%s/stream.php"' % \
                 (stream["streamKey"],
                         filename,
