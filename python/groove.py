@@ -82,6 +82,26 @@ def getResultsFromSearch(query, what="Songs"):
     except:
         return j["result"]["result"]
 
+def getResultsFromPlaylist(query):
+    p = {}
+    p["parameters"] = {}
+    p["parameters"]["playlistID"] = int(query)
+    p["header"] = h
+    p["header"]["client"] = htmlclient[0]
+    p["header"]["clientRevision"] = htmlclient[1]
+    p["header"]["token"] = prepToken("playlistGetSongs", htmlclient[2])
+    p["method"] = "playlistGetSongs"
+    conn = httplib.HTTPConnection(URL)
+    conn.request("POST", "/more.php?" + p["method"], json.JSONEncoder().encode(p), htmlclient[3])
+    resp = conn.getresponse()
+    j = json.JSONDecoder().decode(
+            gzip.GzipFile(fileobj=(StringIO.StringIO(resp.read()))).read())
+    try:
+        return j["result"]["Songs"]
+    except:
+        return j["result"]
+
+
 #Get all songs by a certain artist
 def artistGetSongsEx(id, isVerified):
     p = {}
@@ -116,7 +136,7 @@ def getStreamKeyFromSongIDs(id):
     return json.JSONDecoder().decode(gzip.GzipFile(fileobj=(StringIO.StringIO(conn.getresponse().read()))).read())["result"]
 
 #Add a song to the browser queue, used to imitate a browser
-def addSongsToQueue(songObj, songQueueID, source = "user"):    
+def addSongsToQueue(songObj, songQueueID, source = "user"):
     queueObj = {}
     queueObj["songID"] = songObj["SongID"]
     queueObj["artistID"] = songObj["ArtistID"]
@@ -185,51 +205,70 @@ def markSongDownloadedEx(streamServer, songID, streamKey):
     conn.request("POST", "/more.php?" + p["method"], json.JSONEncoder().encode(p), jsqueue[3])
     return json.JSONDecoder().decode(gzip.GzipFile(fileobj=(StringIO.StringIO(conn.getresponse().read()))).read())["result"]
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2: #Check if we were passed any parameters
-        import gui
-        gui.main() #Open the gui
-        exit() #Close the command line
-    print entrystring #Print the welcome message
-    print "Initializing..."
-    getToken() #Get a static token
-    i = ' '.join(sys.argv[1:]) #Get the search parameter
-    #i = raw_input("Search: ") #Same as above, if you uncomment this, and comment the first 4 lines this can be run entirely from the command line.
-    print "Searching for '%s'..." % i
-    m = 0
-    s = getResultsFromSearch(i) #Get the result from the search
-    l = [('%s: "%s" by "%s" (%s)' % (str(m+1), l["SongName"], l["ArtistName"], l["AlbumName"])) for m,l in enumerate(s[:10])] #Iterate over the 10 first returned items, and produce descriptive strings.
+def ui_results(query):
+    s = getResultsFromSearch(query)
+    res_to_show = 30
+    l = [
+            ('%d: "%s" by "%s" (%s) {ID=%s}' % \
+                    (i, l["SongName"], l["ArtistName"], l["AlbumName"],
+                        l['SongID']))
+            for i,l in enumerate(s[:res_to_show])
+            ] # output strings for first N entries
     if l == []: #If the result was empty print a message and exit
         print "No results found"
-        exit()
+        exit(1)
     else:
-        print '\n'.join(l) #Print the results
+        print '\n'.join(l)
     songid = raw_input("Enter the Song IDs you wish to download (separated with commas) or (q) to exit: ")
     if songid == "" or songid == "q": exit() #Exit if choice is empty or q
     inputtedIDs=songid.split(',')
 
-    #songid = eval(songid)-1 #Turn it into an int and subtract one to fit it into the list index
-    queueID = getQueueID()
     for curID in inputtedIDs:
-        songid=eval(curID)-1
-        addSongsToQueue(s[songid], queueID) #Add the song to the queue
+        yield s[int(curID.strip())]
+
+if __name__ == "__main__":
+    print entrystring #Print the welcome message
+    print "Initializing..."
+    getToken()
+    queueID = getQueueID()
+    if '#!/playlist/' in sys.argv[1]:
+        plid = sys.argv[1].rsplit('/', 1)[1]
+        print "Playlist detected:", plid
+        songs = getResultsFromPlaylist(plid)
+    else:
+        songs = ui_results(sys.argv[1])
+    for song in songs:
+        print song
+        addSongsToQueue(song, queueID)
         print "Retrieving stream key.."
-        stream = getStreamKeyFromSongIDs(s[songid]["SongID"]) #Get the StreamKey for the selected song
+        stream = getStreamKeyFromSongIDs(song["SongID"])
         for k,v in stream.iteritems():
             stream=v
         if stream == []:
             print "Failed"
             exit()
-        cmd = 'wget --post-data=streamKey=%s -O "%s - %s.mp3" "http://%s/stream.php"' % (stream["streamKey"], s[songid]["ArtistName"], s[songid]["SongName"], stream["ip"]) #Run wget to download the song
+        filename = "%s - %s.mp3" % (song["ArtistName"], song["Name"])
+        cmd = 'wget --post-data=streamKey=%s -O "%s" "http://%s/stream.php"' % \
+                (stream["streamKey"],
+                        filename,
+                        stream["ip"]) #Run wget to download the song
         p = subprocess.Popen(cmd, shell=True)
-        markTimer = threading.Timer(30 + random.randint(0,5), markStreamKeyOver30Seconds, [s[songid]["SongID"], str(queueID), stream["ip"], stream["streamKey"]]) #Starts a timer that reports the song as being played for over 30-35 seconds. May not be needed.
+        #Starts a timer that reports the song as being played for over 30-35 seconds. May not be needed.
+        markTimer = threading.Timer(30 + random.randint(0, 5),
+                markStreamKeyOver30Seconds,
+                [song["SongID"], str(queueID), stream["ip"], stream["streamKey"]]
+                )
         markTimer.start()
+
         try:
             p.wait() #Wait for wget to finish
         except KeyboardInterrupt: #If we are interrupted by the user
-            os.remove('%s - %s.mp3' % (s[songid]["ArtistName"], s[songid]["SongName"])) #Delete the song
-            print "\nDownload cancelled. File deleted."
+            try:
+                os.remove(filename) #Delete the song
+                print "\nDownload cancelled. File deleted."
+            except:
+                pass
+
         markTimer.cancel()
         print "Marking song as completed"
-        markSongDownloadedEx(stream["ip"], s[songid]["SongID"], stream["streamKey"]) #This is the important part, hopefully this will stop grooveshark from banning us.
-        #Natural Exit
+        markSongDownloadedEx(stream["ip"], song["SongID"], stream["streamKey"]) #This is the important part, hopefully this will stop grooveshark from banning us.
