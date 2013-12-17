@@ -281,7 +281,10 @@ if __name__ == "__main__":
         if stream == []:
             print "Failed"
             exit()
-        filename = "%s - %s.mp3" % (song["ArtistName"], song["Name"])
+        if 'SongName' in song:
+            filename = "%s - %s.mp3" % (song["ArtistName"], song["SongName"])
+        else:
+            filename = "%s - %s.mp3" % (song["ArtistName"], song["Name"])
         cmd = 'wget --post-data=streamKey=%s -O "%s" "http://%s/stream.php"' % \
                 (stream["streamKey"],
                         filename,

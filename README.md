@@ -1,8 +1,7 @@
 groove-dl
 ----------------------------
 A downloader to Grooveshark's awesome music library. Based off of the [wiki
-here](http://nettech.wikia.com/wiki/Grooveshark_Internal_API). For now, only a
-python version with optional GUI is available.
+here](http://nettech.wikia.com/wiki/Grooveshark_Internal_API).
 
 ###Syntax:
 to interactively search and download:
