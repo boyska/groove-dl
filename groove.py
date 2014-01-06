@@ -10,8 +10,8 @@ import os
 import subprocess
 import gzip
 import threading
-
-#from pprint import pprint
+import logging
+from pprint import pprint, pformat
 
 if sys.version_info[1] >= 6:
     import json
@@ -260,8 +260,28 @@ def markSongDownloadedEx(streamServer, songID, streamKey):
     p["header"]["token"] = prepToken("markSongDownloadedEx", jsqueue[2])
     p["method"] = "markSongDownloadedEx"
     conn = httplib.HTTPConnection(URL)
-    conn.request("POST", "/more.php?" + p["method"], json.JSONEncoder().encode(p), jsqueue[3])
-    return json.JSONDecoder().decode(gzip.GzipFile(fileobj=(StringIO.StringIO(conn.getresponse().read()))).read())["result"]
+    conn.request("POST", "/more.php?" + p["method"],
+                 json.JSONEncoder().encode(p), jsqueue[3])
+
+    try:
+        content = gzip.GzipFile(
+            fileobj=StringIO.StringIO(conn.getresponse().read())
+        ).read()
+        res = json.JSONDecoder().decode(content)
+    except Exception as exc:
+        logging.warning("Unable to mark song as downloaded [%s]" % str(exc))
+        return
+
+    try:
+        ret = res['result']['Return']
+    except Exception as exc:
+        logging.warning("Unexpected format for markDownloaded")
+        pprint(ret)
+        return
+
+    if ret is not True:
+        logging.warning("errors marking as downloaded")
+
 
 def ui_results(query):
     s = getResultsFromSearch(query)
@@ -285,28 +305,29 @@ def ui_results(query):
         yield s[int(curID.strip())]
 
 if __name__ == "__main__":
-    print entrystring #Print the welcome message
-    print "Initializing..."
+    logging.basicConfig(level=logging.INFO)
+    print entrystring
     getToken()
     queueID = getQueueID()
     if '#!/playlist/' in sys.argv[1]:
         plid = sys.argv[1].rsplit('/', 1)[1]
-        print "Playlist detected:", plid
+        logging.info("Playlist detected: %s" % plid)
         songs = getResultsFromPlaylist(plid)
     elif '#!/profile/' in sys.argv[1]:
         plid = sys.argv[1].rsplit('/', 1)[1]
-        print "Artist profile detected:", plid
+        logging.info("Artist profile detected: %s" % plid)
         songs = getArtistSongs(getArtistId(plid))
     elif '#!/' in sys.argv[1]:
         #provamoce
         name = sys.argv[1].rsplit('/', 1)[1]
-        print "Trying", name
+        logging.debug("Trying " + name)
         item = getItemFromPage(name)
         pprint(item)
         if 'artist' in item:
             songs = getArtistSongs(item['artist']['ArtistID'])
         else:
-            print "Unsupported item type"
+            logging.error("Unsupported item type")
+            logging.debug(pformat(item))
             sys.exit(1)
     else:
         songs = ui_results(sys.argv[1])
@@ -347,5 +368,5 @@ if __name__ == "__main__":
                 pass
 
         markTimer.cancel()
-        print "Marking song as completed"
+        logging.debug("Marking song as completed")
         markSongDownloadedEx(stream["ip"], song["SongID"], stream["streamKey"]) #This is the important part, hopefully this will stop grooveshark from banning us.
