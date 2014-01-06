@@ -10,16 +10,27 @@ import os
 import subprocess
 import gzip
 import threading
-if sys.version_info[1] >= 6:  import json
-else: import simplejson as json
+
+#from pprint import pprint
+
+if sys.version_info[1] >= 6:
+    import json
+else:
+    import simplejson as json
 
 _useragent = "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/536.5 (KHTML, like Gecko) Chrome/19.0.1084.56 Safari/536.5"
 _token = None
 
-URL = "grooveshark.com" #The base URL of Grooveshark
-htmlclient = ('htmlshark', '20130520', 'nuggetsOfBaller', {"User-Agent":_useragent, "Content-Type":"application/json", "Accept-Encoding":"gzip"}) #Contains all the information posted with the htmlshark client
+URL = "grooveshark.com"
+htmlclient = ('htmlshark', '20130520', 'nuggetsOfBaller',
+              {"User-Agent": _useragent,
+               "Content-Type": "application/json",
+               "Accept-Encoding": "gzip"})
 jsqueue = ['jsqueue', '20130520', 'chickenFingers']
-jsqueue.append({"User-Agent":_useragent, "Referer": 'http://%s/JSQueue.swf?%s' % (URL, jsqueue[1]), "Accept-Encoding":"gzip", "Content-Type":"application/json"}) #Contains all the information specific to jsqueue
+jsqueue.append({"User-Agent": _useragent,
+                "Referer": 'http://%s/JSQueue.swf?%s' % (URL, jsqueue[1]),
+                "Accept-Encoding": "gzip",
+                "Content-Type": "application/json"})
 
 #Setting the static header (country, session and uuid)
 h = {}
@@ -124,6 +135,23 @@ def getArtistSongs(artistID):
     p["header"]["clientRevision"] = htmlclient[1]
     p["header"]["token"] = prepToken("artistGetArtistSongs", htmlclient[2])
     p["method"] = "artistGetArtistSongs"
+    conn = httplib.HTTPConnection(URL)
+    conn.request("POST", "/more.php?" + p["method"], json.JSONEncoder().encode(p), htmlclient[3])
+    resp = conn.getresponse()
+    j = json.JSONDecoder().decode(
+            gzip.GzipFile(fileobj=(StringIO.StringIO(resp.read()))).read())
+    return j["result"]
+
+def getItemFromPage(name):
+    p = {}
+    p["parameters"] = {}
+    p["parameters"]["name"] = name
+    p["header"] = h
+    p["header"]["client"] = htmlclient[0]
+    p["header"]["clientRevision"] = htmlclient[1]
+    p["header"]["token"] = prepToken("getItemByPageName", htmlclient[2])
+    p["method"] = "getItemByPageName"
+
     conn = httplib.HTTPConnection(URL)
     conn.request("POST", "/more.php?" + p["method"], json.JSONEncoder().encode(p), htmlclient[3])
     resp = conn.getresponse()
@@ -269,6 +297,17 @@ if __name__ == "__main__":
         plid = sys.argv[1].rsplit('/', 1)[1]
         print "Artist profile detected:", plid
         songs = getArtistSongs(getArtistId(plid))
+    elif '#!/' in sys.argv[1]:
+        #provamoce
+        name = sys.argv[1].rsplit('/', 1)[1]
+        print "Trying", name
+        item = getItemFromPage(name)
+        pprint(item)
+        if 'artist' in item:
+            songs = getArtistSongs(item['artist']['ArtistID'])
+        else:
+            print "Unsupported item type"
+            sys.exit(1)
     else:
         songs = ui_results(sys.argv[1])
     for song in songs:
