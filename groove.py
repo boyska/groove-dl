@@ -108,6 +108,24 @@ def getResultsFromPlaylist(query):
             gzip.GzipFile(fileobj=(StringIO.StringIO(resp.read()))).read())
     return j["result"]["Songs"]
 
+def getResultsFromAlbum(query):
+    p = {}
+    p["parameters"] = {}
+    p["parameters"]["albumID"] = int(query)
+    p["header"] = h
+    p["header"]["client"] = htmlclient[0]
+    p["header"]["clientRevision"] = htmlclient[1]
+    p["header"]["token"] = prepToken("albumGetAllSongs", htmlclient[2])
+    p["method"] = "albumGetAllSongs"
+    post_data = json.JSONEncoder().encode(p)
+    conn = httplib.HTTPConnection(URL)
+    conn.request("POST", "/more.php?" + p["method"], post_data, htmlclient[3])
+    resp = conn.getresponse()
+    j = json.JSONDecoder().decode(
+            gzip.GzipFile(fileobj=(StringIO.StringIO(resp.read()))).read())
+    return j["result"]
+
+
 def getArtistId(profileID):
     p = {}
     p["parameters"] = {}
@@ -325,6 +343,10 @@ if __name__ == "__main__":
         plid = sys.argv[1].rsplit('/', 1)[1]
         logging.info("Artist profile detected: %s" % plid)
         songs = getArtistSongs(getArtistId(plid))
+    elif '#!/album/' in sys.argv[1]:
+        plid = sys.argv[1].rsplit('/', 1)[1]
+        logging.info("Album detected: %s" % plid)
+        songs = getResultsFromAlbum(plid)
     elif '#!/' in sys.argv[1]:
         #provamoce
         name = sys.argv[1].rsplit('/', 1)[1]
